@@ -2,58 +2,67 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.set_page_config(page_title="Contador de Precisión", layout="wide")
+# Configuración de página y límite de subida (para fotos de alta resolución)
+st.set_page_config(page_title="Contador Pro", layout="wide")
 
-st.sidebar.header("⚙️ Ajustes de Detección")
-# Sliders para ajustar en tiempo real desde el móvil
-sensibilidad = st.sidebar.slider("Umbral de bordes (Canny)", 10, 255, (50, 150))
-area_min = st.sidebar.slider("Tamaño mínimo del cartón", 100, 5000, 1000)
-iteraciones = st.sidebar.slider("Grosor de bordes (Dilatación)", 1, 5, 2)
+# Barra lateral para calibrar en vivo
+st.sidebar.header("⚙️ Ajustes de Precisión")
+sensibilidad = st.sidebar.slider("Sensibilidad de Bordes", 10, 255, (50, 150))
+area_min = st.sidebar.slider("Tamaño del Cartón (Área)", 500, 10000, 2000)
+dilatacion = st.sidebar.slider("Cierre de Contornos", 1, 5, 2)
 
-st.title("📦 Contador de Cartones de Alta Precisión")
+st.title("📦 Contador de Cartones")
+st.write("Pulsa abajo para abrir la cámara oficial, haz zoom y captura.")
 
-# Volvemos al cargador de archivos porque da más calidad que la cámara en vivo
-# Usamos label_visibility para que se vea limpio
-img_file = st.file_uploader(
-    "Selecciona la cámara para tomar la foto con ZOOM", 
-    type=['jpg', 'jpeg', 'png'],
-    accept_multiple_files=False
-)
+# 1. El cargador de archivos (En móvil abre la cámara Pro con Zoom)
+img_file = st.file_uploader("Capturar o seleccionar imagen", type=['jpg', 'jpeg', 'png'])
+
 if img_file is not None:
-    file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+    # 2. Guardar la foto inmediatamente (Por si Android no la guarda en galería)
+    bytes_data = img_file.getvalue()
+    st.download_button(
+        label="💾 Descargar foto original al móvil",
+        data=bytes_data,
+        file_name="foto_cartones.jpg",
+        mime="image/jpeg"
+    )
+
+    # 3. Convertir para OpenCV
+    file_bytes = np.asarray(bytearray(bytes_data), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
     
-    # 1. Limpieza de imagen
+    # 4. Procesamiento Visual
+    # Convertimos a gris y aplicamos CLAHE (Mejora el contraste para ver mejor los bordes)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.bilateralFilter(gray, 9, 75, 75) # Mantiene bordes, quita ruido
-
-    # 2. Detección de bordes con los valores del slider
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    gray_adj = clahe.apply(gray)
+    
+    # Suavizado para ignorar texturas del cartón y centrarse en la forma
+    blurred = cv2.bilateralFilter(gray_adj, 9, 75, 75)
+    
+    # Detección de bordes y dilatación
     edged = cv2.Canny(blurred, sensibilidad[0], sensibilidad[1])
-    
-    # 3. Cerrar huecos en los contornos
     kernel = np.ones((3,3), np.uint8)
-    dilated = cv2.dilate(edged, kernel, iterations=iteraciones)
+    dilated = cv2.dilate(edged, kernel, iterations=dilatacion)
     
-    # 4. Encontrar contornos
+    # 5. Conteo de objetos
     cnts, _ = cv2.findContours(dilated.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    objetos = 0
-    img_res = image.copy()
-
+    
+    conteo = 0
+    res_img = image.copy()
+    
     for c in cnts:
         area = cv2.contourArea(c)
         if area > area_min:
-            objetos += 1
-            # Dibujar caja y número
+            conteo += 1
             x, y, w, h = cv2.boundingRect(c)
-            cv2.rectangle(img_res, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            cv2.putText(img_res, str(objetos), (x, y - 5), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            # Dibujamos marco y número
+            cv2.rectangle(res_img, (x, y), (x + w, y + h), (0, 255, 0), 4)
+            cv2.putText(res_img, f"#{conteo}", (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
-    st.metric("Total Detectado", f"{objetos} cartones")
+    # 6. Mostrar resultados
+    st.success(f"✅ Se han detectado {conteo} unidades.")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.image(dilated, caption="Mapa de bordes (Lo que ve la IA)", use_container_width=True)
-    with col2:
-        st.image(img_res, caption="Resultado Final", use_container_width=True)
