@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 
 st.set_page_config(page_title="Contador Exacto 20", layout="wide")
 
-st.title("📦 Contador de Precisión (Objetivo: 20)")
+st.title("📦 Contador de Precisió de cajas")
 
 # Sidebar para calibración fina
 st.sidebar.header("Calibración")
@@ -14,7 +14,7 @@ st.sidebar.header("Calibración")
 dist_min = st.sidebar.slider("Separación mínima (píxeles)", 10, 200, 45)
 prominencia = st.sidebar.slider("Fuerza de la sombra", 1, 50, 15)
 
-img_file = st.file_uploader("Sube la foto de las 20 láminas", type=['jpg', 'jpeg', 'png'])
+img_file = st.file_uploader("Sube la foto", type=['jpg', 'jpeg', 'png'])
 
 if img_file is not None:
     file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
@@ -45,7 +45,7 @@ if img_file is not None:
     # 5. Dibujar resultados
     img_res = image.copy()
     for i, p in enumerate(picos):
-        color = (0, 255, 0) if total == 20 else (0, 165, 255) # Verde si es exacto
+        color = (0, 255, 0) if total == 20 or total==25 else (0, 165, 255) # Verde si es exacto
         cv2.line(img_res, (0, p), (ancho, p), color, 3)
         cv2.putText(img_res, f"L{i+1}", (15, p - 10), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
@@ -53,8 +53,6 @@ if img_file is not None:
     # Mostrar métricas
     if total == 20:
         st.success(f"✅ ¡LOGRADO! Se detectaron exactamente {total} láminas.")
-    else:
-        st.warning(f"Detectadas: {total} unidades. Ajusta la 'Separación mínima'.")
     
     st.image(img_res, use_container_width=True)
 
