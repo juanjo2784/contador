@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from scipy.signal import find_peaks
 
-st.set_page_config(page_title="Contador Exacto 20", layout="wide")
+st.set_page_config(page_title="Contador de cajas", layout="wide")
 
 st.title("📦 Contador de cajas")
 
@@ -53,6 +53,8 @@ if img_file is not None:
     # Mostrar métricas
     if total == 20:
         st.success(f"✅ ¡LOGRADO! Se detectaron exactamente {total} láminas.")
+    else:
+        st.warning(f"✅ {total} unidades detectatas.")
     
     st.image(img_res, use_container_width=True)
 
