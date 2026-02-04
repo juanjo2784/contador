@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 
 st.set_page_config(page_title="Contador Exacto 20", layout="wide")
 
-st.title("📦 Contador de Precisió de cajas")
+st.title("📦 Contador de cajas")
 
 # Sidebar para calibración fina
 st.sidebar.header("Calibración")
