@@ -40,13 +40,17 @@ if img_file is not None:
 
     for c in cnts:
         area = cv2.contourArea(c)
+        # 1. Filtro de área: Subimos el mínimo para ignorar esos cuadritos diminutos
+        # Si tus objetos son grandes, este número debería ser mayor (ej. 1500 o 3000)
         if area > area_min:
-            objetos += 1
+            
+            # 2. Filtro de forma (Opcional): Para asegurar que es algo sólido
+            # Obtenemos el rectángulo que encierra el contorno
             x, y, w, h = cv2.boundingRect(c)
-            # Dibujamos en rojo para que resalte
-            cv2.rectangle(img_res, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(img_res, str(objetos), (x, y - 5), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-    st.metric("Objetos en toda la imagen", f"{objetos} detectados")
-    st.image(img_res, use_container_width=True)
+            aspect_ratio = float(w)/h
+            
+            # Dibujamos solo si es un objeto con un tamaño decente
+            objetos += 1
+            cv2.rectangle(img_res, (x, y), (x + w, y + h), (0, 255, 0), 3) # Verde más grueso
+            cv2.putText(img_res, f"Obj {objetos}", (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
