@@ -2,77 +2,51 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.set_page_config(page_title="Contador de Precisión", layout="wide")
+st.set_page_config(page_title="Escaneo Total", layout="wide")
 
-st.title("📦 Contador de Etiquetas (Lógica Original)")
+st.sidebar.header("🔍 Ajustes de Escaneo")
+# Bajamos el mínimo para que no ignore nada
+area_min = st.sidebar.slider("Sensibilidad de detección (Área)", 10, 2000, 100)
+brillo = st.sidebar.slider("Contraste / Brillo", 0.5, 3.0, 1.0)
 
-# --- CONFIGURACIÓN DE LA BARRA LATERAL ---
-st.sidebar.header("⚙️ Ajustes de Detección")
-ROI_X = st.sidebar.slider("ROI X", 0, 1500, 150)
-ROI_Y = st.sidebar.slider("ROI Y", 0, 1500, 100)
-ROI_W = st.sidebar.slider("Ancho ROI", 100, 2000, 350)
-ROI_H = st.sidebar.slider("Alto ROI", 100, 2000, 250)
-BRIGHTNESS_THRESHOLD = st.sidebar.slider("Umbral de Brillo", 0, 255, 200)
-AREA_MIN = st.sidebar.slider("Área Mínima", 50, 5000, 300)
+st.title("📦 Escáner de Superficie Completa")
 
-# --- CARGA DE FOTO ---
-img_file = st.file_uploader("Capturar Foto", type=['jpg', 'jpeg', 'png'])
+img_file = st.file_uploader("Sube la foto aquí", type=['jpg', 'jpeg', 'png'])
 
 if img_file is not None:
-    try:
-        # Convertir el archivo subido a un array de bytes
-        file_bytes = np.frombuffer(img_file.read(), np.uint8)
-        # Decodificar la imagen para OpenCV
-        frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, 1)
+    
+    # Ajuste dinámico de contraste (ayuda a ver en toda la foto)
+    image = cv2.convertScaleAbs(image, alpha=brillo, beta=0)
+    
+    # 1. Procesamiento de imagen completa
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Usamos Umbral Adaptativo: analiza la foto por bloques, no globalmente.
+    # Esto es clave para que busque igual de bien en las esquinas que en el centro.
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY_INV, 11, 2)
+    
+    # 2. Limpieza de ruido
+    kernel = np.ones((3,3), np.uint8)
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    
+    # 3. Encontrar contornos en TODA la imagen
+    cnts, _ = cv2.findContours(opening.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        if frame is None:
-            st.error("No se pudo leer la imagen. Intenta tomar otra foto.")
-        else:
-            # --- TU LÓGICA DE PROCESAMIENTO ---
-            h_img, w_img = frame.shape[:2]
-            
-            # Ajustar ROI para que no se salga de la foto capturada
-            x1, y1 = max(0, ROI_X), max(0, ROI_Y)
-            x2, y2 = min(x1 + ROI_W, w_img), min(y1 + ROI_H, h_img)
-            
-            roi_original = frame[y1:y2, x1:x2].copy()
+    objetos = 0
+    img_res = image.copy()
 
-            if roi_original.size > 0:
-                # 1. Tu técnica de Brillo (Canal V)
-                hsv = cv2.cvtColor(roi_original, cv2.COLOR_BGR2HSV)
-                v_channel = hsv[:, :, 2]
-                _, bright_mask = cv2.threshold(v_channel, BRIGHTNESS_THRESHOLD, 255, cv2.THRESH_BINARY)
-                
-                # 2. Limpieza y Bordes (Canny)
-                kernel = np.ones((3, 3), np.uint8)
-                mask_cleaned = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel)
-                edges = cv2.Canny(mask_cleaned, 80, 180)
-                
-                # 3. Conectar bordes (Cierre morfológico)
-                edges_conn = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
-                
-                # 4. Encontrar contornos y contar
-                contours, _ = cv2.findContours(edges_conn, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                conteo = 0
-                for c in contours:
-                    if cv2.contourArea(c) > AREA_MIN:
-                        conteo += 1
-                        cv2.drawContours(roi_original, [c], -1, (0, 255, 0), 2)
-                        x, y, w, h = cv2.boundingRect(c)
-                        cv2.putText(roi_original, f"#{conteo}", (x, y-5), 1, 1.5, (0, 255, 0), 2)
+    for c in cnts:
+        area = cv2.contourArea(c)
+        if area > area_min:
+            objetos += 1
+            x, y, w, h = cv2.boundingRect(c)
+            # Dibujamos en rojo para que resalte
+            cv2.rectangle(img_res, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.putText(img_res, str(objetos), (x, y - 5), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-                # --- MOSTRAR RESULTADOS ---
-                st.success(f"Detección completada: {conteo} objetos encontrados.")
-                
-                # Mostrar comparación
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.image(mask_cleaned, caption="Máscara de Brillo", use_container_width=True)
-                with col2:
-                    st.image(roi_original, caption="Resultado Final", use_container_width=True)
-            else:
-                st.warning("El cuadro del ROI es inválido. Ajusta los valores en la barra lateral.")
-
-    except Exception as e:
-        st.error(f"Error crítico al procesar: {e}")
+    st.metric("Objetos en toda la imagen", f"{objetos} detectados")
+    st.image(img_res, use_container_width=True)
