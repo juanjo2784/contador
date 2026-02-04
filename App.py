@@ -6,7 +6,7 @@ st.set_page_config(page_title="Escaneo Total", layout="wide")
 
 st.sidebar.header("🔍 Ajustes de Escaneo")
 # Bajamos el mínimo para que no ignore nada
-area_min = st.sidebar.slider("Sensibilidad de detección (Área)", 10, 2000, 100)
+area_min = st.sidebar.slider("Sensibilidad de detección (Área)", 1000, 2000, 100)
 brillo = st.sidebar.slider("Contraste / Brillo", 0.5, 3.0, 1.0)
 
 st.title("📦 Escáner de Superficie Completa")
