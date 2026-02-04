@@ -13,8 +13,12 @@ iteraciones = st.sidebar.slider("Grosor de bordes (Dilatación)", 1, 5, 2)
 st.title("📦 Contador de Cartones de Alta Precisión")
 
 # Volvemos al cargador de archivos porque da más calidad que la cámara en vivo
-img_file = st.file_uploader("Sube una foto clara", type=['jpg', 'jpeg', 'png'])
-
+# Usamos label_visibility para que se vea limpio
+img_file = st.file_uploader(
+    "Selecciona la cámara para tomar la foto con ZOOM", 
+    type=['jpg', 'jpeg', 'png'],
+    accept_multiple_files=False
+)
 if img_file is not None:
     file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
