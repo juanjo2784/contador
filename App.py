@@ -2,70 +2,91 @@ import streamlit as st
 import cv2
 import numpy as np
 
-# Configuración de página y límite de subida (para fotos de alta resolución)
-st.set_page_config(page_title="Contador Pro", layout="wide")
+# --- Configuración de Streamlit ---
+st.set_page_config(page_title="Detector de Etiquetas Pro", layout="wide")
 
-# Barra lateral para calibrar en vivo
-st.sidebar.header("⚙️ Ajustes de Precisión")
-sensibilidad = st.sidebar.slider("Sensibilidad de Bordes", 10, 255, (50, 150))
-area_min = st.sidebar.slider("Tamaño del Cartón (Área)", 500, 10000, 2000)
-dilatacion = st.sidebar.slider("Cierre de Contornos", 1, 5, 2)
+st.title("🏷️ Detector de Etiquetas Transparentes")
+st.write("Sube una foto clara para detectar el contorno de la etiqueta.")
 
-st.title("📦 Contador de Cartones")
-st.write("Pulsa abajo para abrir la cámara oficial, haz zoom y captura.")
+# --- Controles en la Barra Lateral (Tus variables originales) ---
+st.sidebar.header("⚙️ Ajustes de Detección")
+ROI_X = st.sidebar.number_input("ROI X (Inicio)", 0, 2000, 150)
+ROI_Y = st.sidebar.number_input("ROI Y (Inicio)", 0, 2000, 100)
+ROI_W = st.sidebar.number_input("Ancho ROI", 50, 2000, 350)
+ROI_H = st.sidebar.number_input("Alto ROI", 50, 2000, 250)
 
-# 1. El cargador de archivos (En móvil abre la cámara Pro con Zoom)
-img_file = st.file_uploader("Capturar o seleccionar imagen", type=['jpg', 'jpeg', 'png'])
+BRIGHTNESS_THRESHOLD = st.sidebar.slider("Umbral de Brillo", 0, 255, 200)
+KERNEL_SIZE = st.sidebar.slider("Grosor de Conexión (Kernel)", 3, 11, 5, step=2)
+
+# --- Entrada de Imagen ---
+# Usamos uploader para permitir la cámara del teléfono con zoom
+img_file = st.file_uploader("Capturar Foto", type=['jpg', 'jpeg', 'png'])
 
 if img_file is not None:
-    # 2. Guardar la foto inmediatamente (Por si Android no la guarda en galería)
-    bytes_data = img_file.getvalue()
-    st.download_button(
-        label="💾 Descargar foto original al móvil",
-        data=bytes_data,
-        file_name="foto_cartones.jpg",
-        mime="image/jpeg"
-    )
+    # Leer imagen
+    file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+    frame = cv2.imdecode(file_bytes, 1)
+    
+    # 1. Definir ROI (Región de Interés)
+    y1, y2 = ROI_Y, ROI_Y + ROI_H
+    x1, x2 = ROI_X, ROI_X + ROI_W
+    
+    # Asegurar límites
+    h, w = frame.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    
+    roi_original = frame[y1:y2, x1:x2].copy()
 
-    # 3. Convertir para OpenCV
-    file_bytes = np.asarray(bytearray(bytes_data), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, 1)
-    
-    # 4. Procesamiento Visual
-    # Convertimos a gris y aplicamos CLAHE (Mejora el contraste para ver mejor los bordes)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray_adj = clahe.apply(gray)
-    
-    # Suavizado para ignorar texturas del cartón y centrarse en la forma
-    blurred = cv2.bilateralFilter(gray_adj, 9, 75, 75)
-    
-    # Detección de bordes y dilatación
-    edged = cv2.Canny(blurred, sensibilidad[0], sensibilidad[1])
-    kernel = np.ones((3,3), np.uint8)
-    dilated = cv2.dilate(edged, kernel, iterations=dilatacion)
-    
-    # 5. Conteo de objetos
-    cnts, _ = cv2.findContours(dilated.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    conteo = 0
-    res_img = image.copy()
-    
-    for c in cnts:
-        area = cv2.contourArea(c)
-        if area > area_min:
-            conteo += 1
-            x, y, w, h = cv2.boundingRect(c)
-            # Dibujamos marco y número
-            cv2.rectangle(res_img, (x, y), (x + w, y + h), (0, 255, 0), 4)
-            cv2.putText(res_img, f"#{conteo}", (x, y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+    if roi_original.size == 0:
+        st.error("⚠️ El ROI está fuera de los límites de la foto. Ajusta los valores en la barra lateral.")
+    else:
+        # --- Tu Lógica de Procesamiento ---
+        # 1. HSV y Brillo
+        hsv = cv2.cvtColor(roi_original, cv2.COLOR_BGR2HSV)
+        v_channel = hsv[:, :, 2]
 
-    # 6. Mostrar resultados
-    st.success(f"✅ Se han detectado {conteo} unidades.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(dilated, caption="Vista de la IA (Bordes)", use_container_width=True)
-    with col2:
-        st.image(res_img, caption="Resultado del Conteo", use_container_width=True)
+        # 2. Umbral de Brillo
+        _, bright_mask = cv2.threshold(v_channel, BRIGHTNESS_THRESHOLD, 255, cv2.THRESH_BINARY)
+
+        # 3. Limpieza Morfológica
+        kernel_small = np.ones((3,3), np.uint8)
+        bright_mask_cleaned = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel_small)
+
+        # 4. Canny y Cierre (Conectar bordes)
+        edges_canny = cv2.Canny(bright_mask_cleaned, 80, 180)
+        kernel_large = np.ones((KERNEL_SIZE, KERNEL_SIZE), np.uint8)
+        edges_continuous = cv2.morphologyEx(edges_canny, cv2.MORPH_CLOSE, kernel_large, iterations=2)
+        edges_continuous = cv2.dilate(edges_continuous, kernel_large, iterations=1)
+
+        # 5. Detección de Contornos
+        contours, _ = cv2.findContours(edges_continuous, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        res_roi = roi_original.copy()
+        found = False
+
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            if cv2.contourArea(largest_contour) > 100:
+                found = True
+                # Dibujar contorno verde
+                cv2.drawContours(res_roi, [largest_contour], -1, (0, 255, 0), 3)
+                st.success("✅ ¡Etiqueta Detectada!")
+        
+        if not found:
+            st.warning("⚠️ No se detectó la etiqueta. Prueba bajando el 'Umbral de Brillo'.")
+
+        # --- Visualización ---
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.image(bright_mask_cleaned, caption="Máscara de Brillo (Lo que ve el sensor)", use_container_width=True)
+        
+        with col2:
+            # Dibujar el ROI en el frame completo para mostrar dónde buscó
+            frame_visual = frame.copy()
+            cv2.rectangle(frame_visual, (x1, y1), (x2, y2), (255, 0, 0), 5)
+            st.image(frame_visual, caption="Área de Búsqueda (ROI)", use_container_width=True)
+            
+        st.subheader("Resultado Final (Zoom al ROI)")
+        st.image(res_roi, width=600)
