@@ -66,3 +66,6 @@ if img_file is not None:
     
     col1, col2 = st.columns(2)
     with col1:
+        st.image(dilated, caption="Vista de la IA (Bordes)", use_container_width=True)
+    with col2:
+        st.image(res_img, caption="Resultado del Conteo", use_container_width=True)
