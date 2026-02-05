@@ -30,7 +30,7 @@ dist, prom, blur, width = def_params
 st.sidebar.header("🕹️ Calibración de la IA")
 s_dist = st.sidebar.slider("Separación (Evita doble línea)", 1, 150, dist)
 s_prom = st.sidebar.slider("Sensibilidad (Fuerza sombra)", 1, 100, prom)
-s_width = st.sidebar.slider("Filtro de 'Grosor' de sombra", 2.0, 10.0, width)
+s_width = st.sidebar.slider("Filtro de 'Grosor' de sombra", 3.0, 10.0, width)
 s_blur = st.sidebar.slider("Filtro de Reflejo Flash", 1, 25, blur, step=2)
 
 img_file = st.file_uploader("Sube la foto con Flash", type=['jpg', 'jpeg', 'png'])
