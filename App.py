@@ -89,3 +89,4 @@ if img_file is not None:
         st.button("💾 Guardar en Inventario")
 
     with st.expander("📉 Análisis Técnico de Ondas"):
+        st.line_chart(perfil_inv)
