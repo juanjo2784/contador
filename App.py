@@ -3,86 +3,68 @@ import cv2
 import numpy as np
 from scipy.signal import find_peaks
 
-st.set_page_config(page_title="Contador Industrial Pro", layout="wide")
+st.set_page_config(page_title="Contador con Cámara", layout="wide")
 
-st.title("📦 Sistema de Conteo de Alta Densidad")
+st.title("📷 Contador Industrial en Tiempo Real")
 
 # 1. Selectores de Modo
-col_select1, col_select2 = st.columns(2)
-with col_select1:
+col_p, col_d = st.columns(2)
+with col_p:
     producto = st.selectbox("Producto:", ["Cajas / Gruesas", "Separadores (Muy delgados)"])
-with col_select2:
-    distancia_foto = st.radio("Foto tomada desde:", ["Cerca", "Lejos (Masivo)"], horizontal=True)
+with col_d:
+    distancia_foto = st.radio("Distancia:", ["Cerca", "Lejos (Masivo)"], horizontal=True)
 
-# 2. Configuración de Parámetros Base (Ajustados para evitar exceso)
+# 2. Parámetros Base (Ajustados para evitar conteo doble)
 if producto == "Separadores (Muy delgados)":
-    if distancia_foto == "Lejos (Masivo)":
-        # Subimos dist y width para ser más selectivos
-        def_params = (18, 15, 3, 4.0) 
-    else:
-        def_params = (12, 10, 5, 2.0)
+    def_params = (18, 15, 3, 4.0) if distancia_foto == "Lejos (Masivo)" else (12, 10, 5, 2.0)
 else:
     def_params = (40, 20, 7, 2.0)
 
 dist, prom, blur, width = def_params
 
-# 3. Sidebar para Ajustes en Vivo
-st.sidebar.header("🕹️ Calibración Anti-Error")
-# RECUERDA: Si cuenta de más, SUBE estos tres valores:
-s_dist = st.sidebar.slider("Separación (Distancia)", 1, 200, dist)
-s_prom = st.sidebar.slider("Sensibilidad (Subir para contar MENOS)", 1.0, 100.0, float(prom))
-s_width = st.sidebar.slider("Grosor mínimo de sombra", 0.1, 20.0, width)
-s_blur = st.sidebar.slider("Filtro de Nitidez", 1, 31, blur, step=2)
+# 3. Sidebar de Ajuste Fino
+st.sidebar.header("🕹️ Calibración")
+s_dist = st.sidebar.slider("Separación (Distance)", 1, 200, dist)
+s_prom = st.sidebar.slider("Sensibilidad (Prominence)", 1.0, 100.0, float(prom))
+s_width = st.sidebar.slider("Grosor mínimo (Width)", 0.1, 20.0, width)
+s_blur = st.sidebar.slider("Filtro Flash (Blur)", 1, 31, blur, step=2)
 
-img_file = st.file_uploader("Sube la foto con Flash", type=['jpg', 'jpeg', 'png'])
+# --- NUEVO COMPONENTE DE CÁMARA ---
+img_file = st.camera_input("Enfoca el material y toma la foto con Flash")
 
 if img_file is not None:
+    # Procesamiento instantáneo
     file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Desenfoque bidireccional para eliminar el ruido del corrugado
     blurred = cv2.GaussianBlur(gray, (5, s_blur), 0)
     
     alto, ancho = gray.shape
     centro = ancho // 2
-    # Analizamos una franja central un poco más robusta
     perfil = np.mean(blurred[:, centro-50 : centro+50], axis=1)
     perfil_inv = 255 - perfil 
 
-    # Detección con los nuevos filtros
-    picos, _ = find_peaks(perfil_inv, 
-                          distance=s_dist, 
-                          prominence=s_prom,
-                          width=s_width)
-    
+    picos, _ = find_peaks(perfil_inv, distance=s_dist, prominence=s_prom, width=s_width)
     ia_total = len(picos)
     
-    # Dibujo de líneas
+    # Dibujo
     img_res = image.copy()
     for i, p in enumerate(picos):
         cv2.line(img_res, (0, p), (ancho, p), (0, 255, 0), 2)
         if ia_total < 300:
             cv2.putText(img_res, str(i+1), (10, p - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # --- RESULTADOS ---
+    # Resultados y Ajuste Manual
     col_res1, col_res2 = st.columns([2, 1])
-    
     with col_res1:
-        st.image(img_res, use_container_width=True)
+        st.image(img_res, use_container_width=True, caption="Resultado del análisis")
     
     with col_res2:
-        st.metric("Sugerencia de la IA", f"{ia_total} un")
+        st.metric("Conteo IA", f"{ia_total} unidades")
+        conteo_final = st.number_input("🔢 Ajuste Manual Final:", min_value=0, value=int(ia_total), step=1)
         
-        conteo_final = st.number_input("🔢 Conteo Final (Ajuste Manual):", 
-                                       min_value=0, 
-                                       value=int(ia_total), 
-                                       step=1)
-        
-        if conteo_final == ia_total:
-            st.success("✅ Conteo validado.")
-        else:
-            st.info(f"📝 Ajuste manual aplicado: {conteo_final}")
+        if st.button("💾 Registrar en Inventario"):
+            st.success(f"Registrado: {conteo_final} {producto}")
 
-    with st.expander("📉 Análisis de Picos (Si hay ruido, verás picos pequeños que debes filtrar)"):
+    with st.expander("📉 Diagnóstico de Señal"):
         st.line_chart(perfil_inv)
