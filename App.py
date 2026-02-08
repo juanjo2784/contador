@@ -3,6 +3,19 @@ import cv2
 import numpy as np
 from scipy.signal import find_peaks
 
+# Filtro de Gradiente para detectar bordes sin flash
+def detectar_bordes_v2(image, dist, prom, width):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Suavizado para evitar el ruido del grano del cartón
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Gradiente vertical (Sobel)
+    grad_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
+    abs_grad_y = np.absolute(grad_y)
+    
+    perfil = np.mean(abs_grad_y[:, abs_grad_y.shape[1]//2-30 : abs_grad_y.shape[1]//2+30], axis=1)
+    picos, _ = find_peaks(perfil, distance=dist, prominence=prom, width=width)
+    return picos, perfil
+
 st.set_page_config(page_title="Contador Ultra Precisión", layout="wide")
 
 st.title("📦 Contador de Alta Densidad (Modo Masivo)")
